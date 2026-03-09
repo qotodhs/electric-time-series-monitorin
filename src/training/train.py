@@ -2,32 +2,48 @@ import pandas as pd
 from pathlib import Path
 
 
-def train_baseline_model(path: str):
+def train_test_baseline(path: str, test_ratio: float = 0.2):
     df = pd.read_csv(path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    # 이전 시점 값을 다음 시점 예측값으로 사용하는 baseline
+    split_index = int(len(df) * (1 - test_ratio))
+
+    train_df = df.iloc[:split_index].copy()
+    test_df = df.iloc[split_index:].copy()
+
+    # baseline: 직전 실제값을 다음 값 예측으로 사용
     df["predicted_power_usage"] = df["power_usage"].shift(1)
 
-    # 첫 행은 이전 값이 없으므로 제거
     result_df = df.dropna().copy()
 
-    # 절대 오차 계산
-    result_df["absolute_error"] = (
-        result_df["power_usage"] - result_df["predicted_power_usage"]
+    train_result = result_df[result_df["timestamp"].isin(train_df["timestamp"])]
+    test_result = result_df[result_df["timestamp"].isin(test_df["timestamp"])]
+
+    train_result["absolute_error"] = (
+        train_result["power_usage"] - train_result["predicted_power_usage"]
     ).abs()
 
-    mae = result_df["absolute_error"].mean()
+    test_result["absolute_error"] = (
+        test_result["power_usage"] - test_result["predicted_power_usage"]
+    ).abs()
 
-    print("=== Prediction Result ===")
-    print(result_df[["timestamp", "power_usage", "predicted_power_usage", "absolute_error"]])
+    train_mae = train_result["absolute_error"].mean()
+    test_mae = test_result["absolute_error"].mean()
 
-    print(f"\nMAE: {mae:.4f}")
+    print("=== Train Result ===")
+    print(train_result[["timestamp", "power_usage", "predicted_power_usage", "absolute_error"]])
 
-    return result_df, mae
+    print(f"\nTrain MAE: {train_mae:.4f}")
+
+    print("\n=== Test Result ===")
+    print(test_result[["timestamp", "power_usage", "predicted_power_usage", "absolute_error"]])
+
+    print(f"\nTest MAE: {test_mae:.4f}")
+
+    return train_result, test_result, train_mae, test_mae
 
 
 if __name__ == "__main__":
     data_path = Path("data/sample_power.csv")
-    train_baseline_model(data_path)
+    train_test_baseline(data_path)
